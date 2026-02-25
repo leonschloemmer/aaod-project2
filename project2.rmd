@@ -1,0 +1,263 @@
+<!-- ---
+title: "Analysis of Data – Project 2"
+author: "200120178"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+  pdf_document:
+    toc: true
+--- -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo    = TRUE,
+    warning = FALSE,
+    message = FALSE
+)
+```
+
+```{r}
+library(gplots)
+library(GGally)
+library(ggplot2)
+library(corrplot)
+```
+
+## 1  Data Loading
+
+```{r load-data}
+# Read the exam marks data
+# Row 1 contains the max. possible marks; rows 2+ are student records
+raw <- read.table(
+    "200120178exammarks.dat",
+    header    = TRUE, # first line holds column names (A1 A2 ... sum)
+    row.names = 1 # first column holds row labels (student IDs / max.)
+)
+
+# Separate the maximum marks row from the student data
+max_marks <- raw["max.", ]
+marks <- raw[rownames(raw) != "max.", ]
+
+# Quick sanity check
+cat("Number of students:", nrow(marks), "\n")
+cat("Columns:", paste(colnames(marks), collapse = ", "), "\n")
+```
+
+```{r preview}
+head(marks)
+```
+
+```{r structure}
+# Drop the sum column — only analyse individual question marks
+marks_q <- marks[, colnames(marks) != "sum"]
+
+str(marks_q)
+summary(marks_q)
+```
+
+---
+
+## 2  Exploratory Analysis
+
+### 2.1  Histograms per question
+
+```{r histograms, fig.width=10, fig.height=5}
+par(mfrow = c(2, 4))
+for (q in names(marks_q)) {
+    hist(marks_q[[q]], main = q, xlab = "Marks", col = "lightblue")
+}
+par(mfrow = c(1, 1))
+```
+
+### 2.2  Boxplot
+
+```{r boxplot, fig.width=9, fig.height=5}
+boxplot(marks_q,
+    main = "Distribution of marks by question",
+    col = c(rep("skyblue", 4), rep("tomato", 4))
+)
+```
+
+### 2.3  Heatmap
+
+```{r heatmap}
+# Custom clustering: columns by correlation distance, rows by Euclidean on scaled data
+markcor <- cor(marks_q)
+cordist <- 0.5 - markcor / 2
+colclust <- hclust(as.dist(cordist), method = "average")
+rowclust <- hclust(dist(scale(marks_q)), method = "average")
+
+# Blue → white → red diverging palette (101 steps)
+bwr_pal <- colorRampPalette(c("#2166ac", "#f7f7f7", "#d6604d"))(101)
+
+# Plot heatmap
+heatmap.2(as.matrix(marks_q),
+    labRow = rownames(marks_q),
+    Rowv = as.dendrogram(rowclust),
+    Colv = as.dendrogram(colclust),
+    scale = "col", # scale each question for comparability
+    trace = "none", # no trace lines
+    col = bwr_pal,
+    key.title = "Std. score",
+    density.info = "histogram"
+)
+```
+
+### 2.4  Jitter plot
+
+```{r jitterplot, fig.width=9, fig.height=6}
+# Reshape to long format: one row per (student, question, mark)
+questions <- colnames(marks_q)
+q_index <- rep(seq_along(questions), each = nrow(marks_q))
+mark_vec <- unlist(marks_q)
+
+# Jitter plot — reveals distribution of discrete marks per question
+plot(jitter(q_index), jitter(mark_vec),
+    xlab = "Question", ylab = "Mark",
+    xaxt = "n", # suppress default x-axis
+    pch = 16, cex = 0.7, # solid small dots
+    col = adjustcolor("steelblue", alpha.f = 0.5),
+    main = "Student marks by question (jittered)"
+)
+
+axis(1, at = seq_along(questions), labels = questions)
+
+# Add max-mark reference lines for each question
+segments(
+    x0 = seq_along(questions) - 0.4,
+    x1 = seq_along(questions) + 0.4,
+    y0 = as.numeric(max_marks[questions]),
+    col = "red", lwd = 2, lty = 2
+)
+
+legend("topright", legend = "Max. mark", col = "red", lty = 2, lwd = 2, bty = "n")
+```
+
+### 2.5  Parallel coordinates
+
+```{r parcoord, fig.width=10, fig.height=6}
+# Create performance groups based on total mark terciles
+marks_pc <- marks_q
+marks_pc$total <- marks$sum
+breaks <- quantile(marks_pc$total, probs = c(0, 1 / 3, 2 / 3, 1))
+marks_pc$performance <- cut(marks_pc$total,
+    breaks = breaks,
+    labels = c("Low", "Mid", "High"),
+    include.lowest = TRUE
+)
+
+# Line thickness: make High-performers stand out
+linethick <- rep(0.1, nrow(marks_pc))
+linethick[marks_pc$performance == "High"] <- 1.2
+linethick <- rep(linethick, length(questions)) # repeat for each variable
+
+# Parallel coordinates plot
+ggparcoord(marks_pc,
+    columns     = seq_along(questions), # question columns only
+    groupColumn = "performance",
+    # scale       = "uniminmax", # scale each axis to [0, 1]
+    alphaLines  = 0.3
+) +
+    scale_color_manual(values = c(
+        "Low"  = "#d6604d",
+        "Mid"  = "#4393c3",
+        "High" = "#1a9850"
+    )) +
+    geom_line(linewidth = linethick) +
+    labs(
+        title = "Parallel coordinates – marks by question",
+        x     = "Question",
+        y     = "Scaled mark (0 = min, 1 = max)",
+        color = "Performance"
+    ) +
+    theme_minimal(base_size = 13)
+```
+
+### 2.6  Correlation matrix
+
+```{r correlation}
+cor_mat <- cor(marks_q)
+round(cor_mat, 2)
+```
+
+```{r corrplot, fig.width=7, fig.height=7}
+corrplot(cor_mat,
+    method       = "color", # coloured heatmap
+    type         = "upper", # only upper triangle (cleaner)
+    addCoef.col  = "black", # add correlation numbers
+    tl.col       = "black", # text label colour
+    number.cex   = 0.8, # size of the numbers
+    tl.cex       = 0.8
+)
+```
+
+### 2.7  Pairs plot
+
+```{r pairs, fig.width=10, fig.height=10}
+pairs(marks_q, main = "Pairs plot of exam questions")
+```
+
+---
+
+## 3  PCA
+
+```{r pca}
+pca <- prcomp(marks_q, scale. = TRUE)
+
+summary(pca) # % variance explained
+pca$rotation # loadings
+```
+
+```{r scree}
+plot(pca, type = "l", main = "Scree plot")
+```
+
+```{r biplot, fig.width=8, fig.height=8}
+biplot(pca, scale = 0)
+```
+
+---
+
+## 4  Section Comparison (A vs B)
+
+```{r section-means}
+A_mean <- apply(marks_q[, 1:4], 2, mean)
+B_mean <- apply(marks_q[, 5:8], 2, mean)
+
+A_mean
+B_mean
+```
+
+```{r section-ttest}
+t.test(rowSums(marks_q[, 1:4]), rowSums(marks_q[, 5:8]))
+```
+
+```{r a-vs-b, fig.width=7, fig.height=6}
+marks_q$A_total <- rowSums(marks_q[, 1:4])
+marks_q$B_total <- rowSums(marks_q[, 5:8])
+
+plot(marks_q$A_total, marks_q$B_total,
+    xlab = "Total A marks", ylab = "Total B marks",
+    pch = 19, col = "darkblue",
+    main = "A vs B marks per student"
+)
+abline(lm(B_total ~ A_total, data = marks_q), col = "red")
+
+# Clean up: remove temporary columns so marks_q stays clean for later use
+marks_q$A_total <- NULL
+marks_q$B_total <- NULL
+```
+
+---
+
+## 5  Linear Model
+
+```{r lm-summary}
+# Fit a linear model: sum ~ A1 + A2 + A3 + A4 + B1 + B2 + B3 + B4
+model <- lm(sum ~ A1 + A2 + A3 + A4 + B1 + B2 + B3 + B4, data = marks)
+summary(model)
+```
