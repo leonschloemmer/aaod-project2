@@ -68,7 +68,12 @@ summary(marks_q)
 ```{r histograms, fig.width=10, fig.height=5}
 par(mfrow = c(2, 4))
 for (q in names(marks_q)) {
-    hist(marks_q[[q]], main = q, xlab = "Marks", col = "lightblue")
+    qmax <- as.numeric(max_marks[[q]])
+    hist(marks_q[[q]],
+        breaks = seq(-0.5, qmax + 0.5, by = 1),
+        main = q, xlab = "Marks", col = "lightblue", xaxt = "n"
+    )
+    axis(1, at = 0:qmax)
 }
 par(mfrow = c(1, 1))
 ```
@@ -139,6 +144,8 @@ legend("topright", legend = "Max. mark", col = "red", lty = 2, lwd = 2, bty = "n
 
 ### 2.5  Parallel coordinates
 
+Note that the lines have 30% opacity, so that when they overlap they dont completely obscure each other.
+
 ```{r parcoord, fig.width=10, fig.height=6}
 # Create performance groups based on total mark terciles
 marks_pc <- marks_q
@@ -150,12 +157,7 @@ marks_pc$performance <- cut(marks_pc$total,
     include.lowest = TRUE
 )
 
-# Line thickness: make High-performers stand out
-linethick <- rep(0.1, nrow(marks_pc))
-linethick[marks_pc$performance == "High"] <- 1.2
-linethick <- rep(linethick, length(questions)) # repeat for each variable
-
-# Parallel coordinates plot
+# Parallel coordinates plot — map linewidth to performance group
 ggparcoord(marks_pc,
     columns     = seq_along(questions), # question columns only
     groupColumn = "performance",
@@ -167,7 +169,6 @@ ggparcoord(marks_pc,
         "Mid"  = "#4393c3",
         "High" = "#1a9850"
     )) +
-    geom_line(linewidth = linethick) +
     labs(
         title = "Parallel coordinates – marks by question",
         x     = "Question",
