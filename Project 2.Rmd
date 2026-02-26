@@ -1,0 +1,365 @@
+---
+title: "'Exammarks' Report"
+author: "Francesca Vanzo, Leon Schlömmer, Linde Van Saane"
+output: pdf_document
+date: "February 25th, 2026"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Introduction
+
+In this report we analyse the data set "2001exammarks.dat", which contains the individual marks each student obtained in questions A1,A2,A3,A4,B1,B2,B3,B4 on the exam course "STAT2001 Probability and Inference". The data set also contains information about the maximum possible grade achievable in each question (which varies based on the question), and the final grade of each student, computed as the sum of the individual marks of each question. The exam is structured so that questions A1 to A4 are easier, and have a maximum total mark of 40 points, while questions B1 to B4 should be more difficult and in total be worth 60 maximum points.
+
+The aim is to identify whether the questions all measure the same skill ( hence of strongly the results in the different questions are related to each other), and whether questions B are actually more difficult than questions A.
+
+## 2. Data analysis
+
+We start by observing the distribution of the grades for each question:
+
+```{r,include=FALSE}
+raw <- read.table(
+    "200120178exammarks.dat",
+    header    = TRUE, # first line holds column names (A1 A2 ... sum)
+    row.names = 1 # first column holds row labels (student IDs / max.)
+)
+marks <- raw[rownames(raw) != "max.", ]
+marks_q <- marks[, -9]
+```
+
+```{r histograms,echo=FALSE,fig.width=10, fig.height=5}
+par(mfrow = c(2, 4))
+for (q in names(marks_q)) {
+    hist(marks_q[[q]], main = q, xlab = "Marks", col = "lightblue")
+}
+par(mfrow = c(1, 1))
+```
+
+Questions A1,A3,A4 behave how we would expect easier questions to behave, they have all left-skewed distributions, with many students scoring the top marks for each question. When it comes to question B4, which is theoretically a more difficult question,it has most of the students either scoring a high grade, or a very low one, meaning that it was a question for which a student was completely prepared or they wouldn’t be able to score an average mark. On the other hand, questions B2 and B3 present much more variability, with a lower number of students being able to achieve the maximum number of points available. The last two questions are the ones that seem the furthest away from our expectations. The question A2 has a lot more variability in its distribution compared to the other "easy" points of the exam. In fact, most students either scored 6 or 7 points out of the 10 available, and only a low concentration scored more than that. This could indicate that question A2 is not weighted correctly compared to its difficulty, and is much more difficult than the other A questions. Similarly, question B1 is the most left-skewed question out of all the ones we consider, with very few students not scoring the top mark. Hence question B1 also seems to not be labelled correctly based on its difficulty, for reasons inverse to A2.
+
+We can furthermore investigate these observations with a parallel coordinates plot:
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,fig.align='right'}
+marks_pc <- marks_q
+marks_pc$total <- marks$sum
+questions <- colnames(marks_q)
+breaks <- quantile(marks_pc$total, probs = c(0, 1 / 3, 2 / 3, 1))
+marks_pc$performance <- cut(marks_pc$total,
+    breaks = breaks,
+    labels = c("Low", "Mid", "High"),
+    include.lowest = TRUE
+)
+# Parallel coordinates plot
+library(GGally)
+ggparcoord(marks_pc,
+    columns     = seq_along(questions), # question columns only
+    groupColumn = "performance",
+    # scale       = "uniminmax", # scale each axis to [0, 1]
+    alphaLines  = 0.3
+) +
+    scale_color_manual(values = c(
+        "Low"  = "#d6604d",
+        "Mid"  = "#4393c3",
+        "High" = "#1a9850"
+    )) +
+    labs(title="Parallel coordinates plot of the questions:",
+        x     = "Question",
+        y     = "Scaled mark",
+        color = "Performance"
+    ) +
+    theme_minimal(base_size = 11)+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+This plot gives us another visual representation of the distribution on how the students scored for each question, with marks being divided into 3 categories (low, mid, high).
+
+...
+
+Finally, we can also consult a jitter plot of the questions:
+
+```{r jitterplot, fig.width=9, fig.height=6,echo=FALSE}
+q_index <- rep(seq_along(questions), each = nrow(marks_q))
+max_marks <- raw["max.", ]
+mark_vec <- unlist(marks_q)
+
+# Jitter plot — reveals distribution of discrete marks per question
+plot(jitter(q_index), jitter(mark_vec),
+    xlab = "Question", ylab = "Mark",
+    xaxt = "n", # suppress default x-axis
+    pch = 16, cex = 0.7, # solid small dots
+    col = adjustcolor("steelblue", alpha.f = 0.5),
+    main = "Student marks by question (jittered)"
+)
+
+axis(1, at = seq_along(questions), labels = questions)
+
+# Add max-mark reference lines for each question
+segments(
+    x0 = seq_along(questions) - 0.4,
+    x1 = seq_along(questions) + 0.4,
+    y0 = as.numeric(max_marks[questions]),
+    col = "red", lwd = 2, lty = 2
+)
+
+legend("topright", legend = "Max. mark", col = "red", lty = 2, lwd = 2, bty = "n")
+```
+
+Here the same conclusions we reached before are once again confirmed. We can see how B1 is clearly the question with the highest concentration of students at the top mark ( indicated in each question by the red line). B2 is the query with the most variability, as we can see its values go from 0 to the top mark and are distributed approximately homogenous.
+
+### -Correlation:
+
+Other considerations can be made regarding the relationship between variables. To this aim, we can consult a heat map:
+
+```{r,include=FALSE}
+cor_mat <- cor(raw[-1,])
+round(cor_mat, 2)
+```
+
+```{r,echo=FALSE,fig.width=7, fig.height=7,message=FALSE,warning=FALSE}
+library(corrplot)
+corrplot(cor_mat,
+    method       = "color", # coloured heatmap
+    type         = "upper", # only upper triangle (cleaner)
+    addCoef.col  = "black", # add correlation numbers
+    tl.col       = "black", # text label colour
+    number.cex   = 0.8, # size of the numbers
+    tl.cex       = 0.8
+)
+```
+
+This plot allows us to observe how each question is correlated to sum. A high correlation between variables means that the variability of one question affects the variability of the "sum" variable ( which indicates the final grade for the exam of each student). Since B questions are supposedly harder and have a larger possible number of points achievable, we expect them to have a high correlation with the sum variable. The A questions are intended for students who don't know as much of the exam material to still be able to pass with the minimum. In this plot we observe how questions B2,B3,B4 all have high correlation with sum (0.89,0.83,0.79 respectively). On the other hand, B1 is not as correlated. Both questions A3 and A4 have a higher correlation with sum than B1, which would mean that they have more "weight" on the final result of the exam compared to it.
+
+### -Principal Component Analysis:
+
+```{r,include=FALSE}
+pca <- prcomp(marks_q, scale. = TRUE)
+summary(pca) # % variance explained
+pca$rotation # loadings
+```
+
+```{r,echo=FALSE}
+plot(pca, type = "l", main = "Screen plot")
+```
+
+```{r,include=FALSE}
+biplot(pca, scale = 0)
+
+```
+
+### -Comparison between A and B:
+
+We can also decide to compare not the singular questions, but the 2 categories A and B. In this case we plot them together in a scatter plot and observe their relationship:
+
+```{r,include=FALSE}
+A_mean <- apply(marks_q[, 1:4], 2, mean)
+B_mean <- apply(marks_q[, 5:8], 2, mean)
+
+```
+
+```{r,echo=FALSE}
+marks_q$A_total <- rowSums(marks_q[, 1:4])
+marks_q$B_total <- rowSums(marks_q[, 5:8])
+
+plot(marks_q$A_total, marks_q$B_total,
+    xlab = "Total A marks", ylab = "Total B marks",
+    pch = 19, col = "darkblue",
+    main = "A vs B marks per student"
+)
+abline(lm(B_total ~ A_total, data = marks_q), col = "red")
+marks_q$A_total <- NULL
+marks_q$B_total <- NULL
+```
+
+We can clearly see how (approximately) students who scored a higher grade in section B also scored a high grade in section A, while quite a few students scored high on A and lower on B ( which would suggest that, generally speaking, the hypothesis that questions B are harder seems to hold). There are few students that scored low on both sections, hence did not pass the exam.
+
+### -Linear model:
+
+```{r}
+model <- lm(sum ~ A1 + A2 + A3 + A4 + B1 + B2 + B3 + B4, data = marks)
+summary(model)
+```
+
+## 3. Features of the data
+
+The data set "exammarks" is a data set containing 151 observations for 9 variables (questions A1 to B4 plus the variable "sum" containing the final grade). The data set also has as the first row the values of the maximum achievable mark for each question.
+
+...
+
+## 4. Conclusions
+
+We have analysed the 9 variables in the data set that indicate the marks that each of the 151 students scored for each question plus the final grade for the exam of the course ""STAT2001 Probability and Inference". The questions were:
+
+-   A1 Basic Probability
+
+-   A2 Two-dimensional densities
+
+-   A3 Distributions derived from the normal distribution
+
+-   A4 Central Limit Theorem and approximation
+
+-   B1 Moment- generating functions
+
+-   B2 Joint, marginal and conditional distribution
+
+-   B3 Multivariate normal distribution
+
+-   B4 Estimation theory
+
+We observed the distribution of each variable, the relationship between each other and between "sum", and we also considered them not individually but as part of the two main categories, A and B (easy and difficult questions). We wanted to understand whether the questions all measure the same "skill", meaning that we wanted to see how the results of each question were correlated to each other, if it was properly testing the overall knowledge of the student. Furthermore another aim was to test whether questions B were indeed more difficult than questions A.
+
+## Appendix
+
+```{r,eval=FALSE}
+library(gplots)
+library(GGally)
+library(ggplot2)
+library(corrplot)
+# Read the exam marks data
+# Row 1 contains the max. possible marks; rows 2+ are student records
+raw <- read.table(
+    "200120178exammarks.dat",
+    header    = TRUE, # first line holds column names (A1 A2 ... sum)
+    row.names = 1 # first column holds row labels (student IDs / max.)
+)
+
+# Separate the maximum marks row from the student data
+max_marks <- raw["max.", ]
+marks <- raw[rownames(raw) != "max.", ]
+
+# Quick sanity check
+cat("Number of students:", nrow(marks), "\n")
+cat("Columns:", paste(colnames(marks), collapse = ", "), "\n")
+head(marks)
+# Drop the sum column — only analyse individual question marks
+marks_q <- marks[,-9]
+
+str(marks_q)
+summary(marks_q)
+#Histograms
+par(mfrow = c(2, 4))
+for (q in names(marks_q)) {
+    hist(marks_q[[q]], main = q, xlab = "Marks", col = "lightblue")
+}
+par(mfrow = c(1, 1))
+#Boxplot
+boxplot(marks_q,
+    main = "Distribution of marks by question",
+    col = c(rep("skyblue", 4), rep("tomato", 4))
+)
+# Custom clustering: columns by correlation distance, rows by Euclidean on scaled data
+markcor <- cor(marks_q)
+cordist <- 0.5 - markcor / 2
+colclust <- hclust(as.dist(cordist), method = "average")
+rowclust <- hclust(dist(scale(marks_q)), method = "average")
+
+# Blue → white → red diverging palette (101 steps)
+bwr_pal <- colorRampPalette(c("#2166ac", "#f7f7f7", "#d6604d"))(101)
+
+# Plot heatmap
+heatmap.2(as.matrix(marks_q),
+    labRow = rownames(marks_q),
+    Rowv = as.dendrogram(rowclust),
+    Colv = as.dendrogram(colclust),
+    scale = "col", # scale each question for comparability
+    trace = "none", # no trace lines
+    col = bwr_pal,
+    key.title = "Std. score",
+    density.info = "histogram"
+# Reshape to long format: one row per (student, question, mark)
+questions <- colnames(marks_q)
+q_index <- rep(seq_along(questions), each = nrow(marks_q))
+mark_vec <- unlist(marks_q)
+
+# Jitter plot — reveals distribution of discrete marks per question
+plot(jitter(q_index), jitter(mark_vec),
+    xlab = "Question", ylab = "Mark",
+    xaxt = "n", # suppress default x-axis
+    pch = 16, cex = 0.7, # solid small dots
+    col = adjustcolor("steelblue", alpha.f = 0.5),
+    main = "Student marks by question (jittered)"
+)
+
+axis(1, at = seq_along(questions), labels = questions)
+
+# Add max-mark reference lines for each question
+segments(
+    x0 = seq_along(questions) - 0.4,
+    x1 = seq_along(questions) + 0.4,
+    y0 = as.numeric(max_marks[questions]),
+    col = "red", lwd = 2, lty = 2
+)
+
+legend("topright", legend = "Max. mark", col = "red", lty = 2, lwd = 2, bty = "n")
+marks_pc <- marks_q
+marks_pc$total <- marks$sum
+breaks <- quantile(marks_pc$total, probs = c(0, 1 / 3, 2 / 3, 1))
+marks_pc$performance <- cut(marks_pc$total,
+    breaks = breaks,
+    labels = c("Low", "Mid", "High"),
+    include.lowest = TRUE
+)
+# Parallel coordinates plot
+ggparcoord(marks_pc,
+    columns     = seq_along(questions), # question columns only
+    groupColumn = "performance",
+    # scale       = "uniminmax", # scale each axis to [0, 1]
+    alphaLines  = 0.3
+) +
+    scale_color_manual(values = c(
+        "Low"  = "#d6604d",
+        "Mid"  = "#4393c3",
+        "High" = "#1a9850"
+    )) +
+    labs(title="Parallel coordinates plot of the questions:",
+        x     = "Question",
+        y     = "Scaled mark",
+        color = "Performance"
+    ) +
+    theme_minimal(base_size = 11)+
+  theme(plot.title = element_text(hjust = 0.5))
+cor_mat <- cor(raw[-1,])
+round(cor_mat, 2)
+corrplot(cor_mat,
+    method       = "color", # coloured heatmap
+    type         = "upper", # only upper triangle (cleaner)
+    addCoef.col  = "black", # add correlation numbers
+    tl.col       = "black", # text label colour
+    number.cex   = 0.8, # size of the numbers
+    tl.cex       = 0.8
+)
+#Pairs plot:
+pairs(marks_q, main = "Pairs plot of exam questions")
+#PCA:
+pca <- prcomp(marks_q, scale. = TRUE)
+
+summary(pca) # % variance explained
+pca$rotation # loadings
+plot(pca, type = "l", main = "Scree plot")
+biplot(pca, scale = 0)
+
+#Comparison between A and B:
+A_mean <- apply(marks_q[, 1:4], 2, mean)
+B_mean <- apply(marks_q[, 5:8], 2, mean)
+A_mean
+B_mean
+t.test(rowSums(marks_q[, 1:4]), rowSums(marks_q[, 5:8]))
+marks_q$A_total <- rowSums(marks_q[, 1:4])
+marks_q$B_total <- rowSums(marks_q[, 5:8])
+
+plot(marks_q$A_total, marks_q$B_total,
+    xlab = "Total A marks", ylab = "Total B marks",
+    pch = 19, col = "darkblue",
+    main = "A vs B marks per student"
+)
+abline(lm(B_total ~ A_total, data = marks_q), col = "red")
+
+# Clean up: remove temporary columns so marks_q stays clean for later use
+marks_q$A_total <- NULL
+marks_q$B_total <- NULL
+
+# Fit a linear model: sum ~ A1 + A2 + A3 + A4 + B1 + B2 + B3 + B4
+model <- lm(sum ~ A1 + A2 + A3 + A4 + B1 + B2 + B3 + B4, data = marks)
+summary(model)
+```
