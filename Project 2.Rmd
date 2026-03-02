@@ -26,13 +26,19 @@ raw <- read.table(
     row.names = 1 # first column holds row labels (student IDs / max.)
 )
 marks <- raw[rownames(raw) != "max.", ]
-marks_q <- marks[, -9]
+marks_q <- marks[, colnames(marks) != "sum"]
+max_marks <- raw["max.", ]
 ```
 
 ```{r histograms,echo=FALSE,fig.width=10, fig.height=5}
 par(mfrow = c(2, 4))
 for (q in names(marks_q)) {
-    hist(marks_q[[q]], main = q, xlab = "Marks", col = "lightblue")
+ qmax <- as.numeric(max_marks[[q]])
+    hist(marks_q[[q]],
+        breaks = seq(-0.5, qmax + 0.5, by = 1),
+        main = q, xlab = "Marks", col = "lightblue", xaxt = "n"
+    )
+    axis(1, at = 0:qmax)
 }
 par(mfrow = c(1, 1))
 ```
@@ -73,20 +79,24 @@ ggparcoord(marks_pc,
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
-This plot gives us another visual representation of the distribution on how the students scored for each question, with marks being divided into 3 categories (low, mid, high).
+This plot gives us another visual representation of the distribution on how the students scored for each question, with marks being divided into 3 categories (low, mid, high). It's clear that questions B2, B3 and B4 behave similarly, with students who performed well in these questions being above average, and students who didn't perform well being under average. The 3 categories for these questions are more distinctly separated vertically compared to the other questions. This would suggest that questions B2-B4 are in fact more difficult and they discriminate performance better than questions A.
 
-...
+In questions A there is more of an overlap between low and mid ranges, and in general they present more variability than B2,B3,B4. A note can be made about A2, which appears to have more variation but also slightly less separation between low, mid and high.
+
+Students with higher grades in each question appear more consistent, especially in section B, while students with a worse performance have a drop in questions B specifically.
+
+\newpage
 
 Finally, we can also consult a jitter plot of the questions:
 
-```{r jitterplot, fig.width=9, fig.height=6,echo=FALSE}
+```{r jitterplot, fig.width=8, fig.height=5,echo=FALSE}
 q_index <- rep(seq_along(questions), each = nrow(marks_q))
 max_marks <- raw["max.", ]
 mark_vec <- unlist(marks_q)
 
 # Jitter plot — reveals distribution of discrete marks per question
 plot(jitter(q_index), jitter(mark_vec),
-    xlab = "Question", ylab = "Mark",
+    xlab = "Questions", ylab = "Mark",
     xaxt = "n", # suppress default x-axis
     pch = 16, cex = 0.7, # solid small dots
     col = adjustcolor("steelblue", alpha.f = 0.5),
@@ -108,6 +118,18 @@ legend("topright", legend = "Max. mark", col = "red", lty = 2, lwd = 2, bty = "n
 
 Here the same conclusions we reached before are once again confirmed. We can see how B1 is clearly the question with the highest concentration of students at the top mark ( indicated in each question by the red line). B2 is the query with the most variability, as we can see its values go from 0 to the top mark and are distributed approximately homogenous.
 
+### -Principal Component Analysis:
+
+```{r,include=FALSE}
+pca <- prcomp(marks_q, scale. = TRUE)
+summary(pca) # % variance explained
+```
+
+```{r,echo=FALSE}
+round(pca$rotation,digits = 3) # loadings
+plot(pca, type = "l", main = "Screen plot")
+```
+
 ### -Correlation:
 
 Other considerations can be made regarding the relationship between variables. To this aim, we can consult a heat map:
@@ -122,31 +144,12 @@ library(corrplot)
 corrplot(cor_mat,
     method       = "color", # coloured heatmap
     type         = "upper", # only upper triangle (cleaner)
-    addCoef.col  = "black", # add correlation numbers
-    tl.col       = "black", # text label colour
-    number.cex   = 0.8, # size of the numbers
-    tl.cex       = 0.8
+    tl.cex       = 0.8,
+    tl.col = "black" # text label colour
 )
 ```
 
 This plot allows us to observe how each question is correlated to sum. A high correlation between variables means that the variability of one question affects the variability of the "sum" variable ( which indicates the final grade for the exam of each student). Since B questions are supposedly harder and have a larger possible number of points achievable, we expect them to have a high correlation with the sum variable. The A questions are intended for students who don't know as much of the exam material to still be able to pass with the minimum. In this plot we observe how questions B2,B3,B4 all have high correlation with sum (0.89,0.83,0.79 respectively). On the other hand, B1 is not as correlated. Both questions A3 and A4 have a higher correlation with sum than B1, which would mean that they have more "weight" on the final result of the exam compared to it.
-
-### -Principal Component Analysis:
-
-```{r,include=FALSE}
-pca <- prcomp(marks_q, scale. = TRUE)
-summary(pca) # % variance explained
-pca$rotation # loadings
-```
-
-```{r,echo=FALSE}
-plot(pca, type = "l", main = "Screen plot")
-```
-
-```{r,include=FALSE}
-biplot(pca, scale = 0)
-
-```
 
 ### -Comparison between A and B:
 
@@ -227,27 +230,26 @@ raw <- read.table(
 # Separate the maximum marks row from the student data
 max_marks <- raw["max.", ]
 marks <- raw[rownames(raw) != "max.", ]
-
+# Drop the sum column — only analyse individual question marks
+marks_q <- marks[, colnames(marks) != "sum"]
+str(marks_q)
+summary(marks_q)
 # Quick sanity check
 cat("Number of students:", nrow(marks), "\n")
 cat("Columns:", paste(colnames(marks), collapse = ", "), "\n")
-head(marks)
-# Drop the sum column — only analyse individual question marks
-marks_q <- marks[,-9]
 
-str(marks_q)
-summary(marks_q)
 #Histograms
 par(mfrow = c(2, 4))
 for (q in names(marks_q)) {
-    hist(marks_q[[q]], main = q, xlab = "Marks", col = "lightblue")
+ qmax <- as.numeric(max_marks[[q]])
+    hist(marks_q[[q]],
+        breaks = seq(-0.5, qmax + 0.5, by = 1),
+        main = q, xlab = "Marks", col = "lightblue", xaxt = "n"
+    )
+    axis(1, at = 0:qmax)
 }
 par(mfrow = c(1, 1))
-#Boxplot
-boxplot(marks_q,
-    main = "Distribution of marks by question",
-    col = c(rep("skyblue", 4), rep("tomato", 4))
-)
+
 # Custom clustering: columns by correlation distance, rows by Euclidean on scaled data
 markcor <- cor(marks_q)
 cordist <- 0.5 - markcor / 2
