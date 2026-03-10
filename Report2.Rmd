@@ -21,7 +21,7 @@ We start by observing the distribution of the grades for each question:
 
 ```{r,include=FALSE}
 raw <- read.table(
-    "~/Desktop/Uni/Adv. analysis/exammarks.dat",
+    "200120178exammarks.dat",
     header    = TRUE, # first line holds column names (A1 A2 ... sum)
     row.names = 1 # first column holds row labels (student IDs / max.)
 )
@@ -180,6 +180,32 @@ corrplot(cor_mat,
 ```
 
 This plot allows us to observe how each question is correlated to sum. A high correlation between variables means that the variability of one question affects the variability of the "sum" variable ( which indicates the final grade for the exam of each student). Since B questions are supposedly harder and have a larger possible number of points achievable, we expect them to have a high correlation with the sum variable. The A questions are intended for students who don't know as much of the exam material to still be able to pass with the minimum. In this plot we observe how questions B2,B3,B4 all have high correlation with sum (0.89,0.83,0.79 respectively). On the other hand, B1 is not as correlated. Both questions A3 and A4 have a higher correlation with sum than B1, which would mean that they have more "weight" on the final result of the exam compared to it.
+
+### -Comparison between A and B:
+
+We can also decide to compare not the singular questions, but the 2 categories A and B. In this case we plot them together in a scatter plot and observe their relationship:
+
+```{r,include=FALSE}
+A_mean <- apply(marks_q[, 1:4], 2, mean)
+B_mean <- apply(marks_q[, 5:8], 2, mean)
+
+```
+
+```{r,echo=FALSE}
+marks_q$A_total <- rowSums(marks_q[, 1:4])
+marks_q$B_total <- rowSums(marks_q[, 5:8])
+
+plot(marks_q$A_total, marks_q$B_total,
+    xlab = "Total A marks", ylab = "Total B marks",
+    pch = 19, col = "darkblue",
+    main = "A vs B marks per student"
+)
+marks_q$A_total <- NULL
+marks_q$B_total <- NULL
+```
+
+We can clearly see how (approximately) students who scored a higher grade in section B also scored a high grade in section A, while quite a few students scored high on A and lower on B ( which would suggest that, generally speaking, the hypothesis that questions B are harder seems to hold). There are few students that scored low on both sections, hence did not pass the exam.
+
 
 ## 3. Features of the data
 
